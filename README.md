@@ -1,0 +1,1 @@
+# mankomania simulator
