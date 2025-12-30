@@ -50,40 +50,75 @@ struct GameState {
 }
 
 fn main() {
+    let mut green_wins = 0;
+    let mut red_wins = 0;
+    let mut blue_wins = 0;
+    let mut yellow_wins = 0;
+    for _ in 1..100 {
+        let game_result = self::simulate_game();
+        if game_result.winner == "Green" {
+            green_wins += 1;
+        } else if game_result.winner == "Red" {
+            red_wins += 1;
+        } else if game_result.winner == "Blue" {
+            blue_wins += 1;
+        } else if game_result.winner == "Yellow" {
+            yellow_wins += 1;
+        }
+        println!(
+            "Player {:?} has won after {:?} rounds",
+            game_result.winner, game_result.rounds
+        );
+    }
+
+    println!(
+        "End Result: Green {:?}, Red {:?}, Blue {:?}, Yellow {:?}",
+        green_wins, red_wins, blue_wins, yellow_wins
+    );
+}
+
+#[derive(Default, Debug)]
+struct GameResult {
+    winner: String,
+    rounds: i32,
+}
+
+fn simulate_game() -> GameResult {
     let game_state = &mut GameState {
-        game_board: self::build_game_board(),
+        game_board: build_game_board(),
         lottery_account: 0,
     };
     let game_board_size = game_state.game_board.len();
 
     let mut players = self::create_players();
 
-    println!("Status: Game board has {:?} fields", game_board_size);
-
     let mut loop_count = 0;
-    let mut game_over = false;
-    while !game_over {
+    while loop_count <= 500 {
         for player in &mut players {
             player.throw_dice(game_board_size);
             player.play_effect(game_state);
-            println!(
+            /*println!(
                 "{:?}: Player {:?} is on field {:?}: {:?} with {:?} dollar",
                 loop_count,
                 player.name,
                 player.position,
                 game_state.game_board[player.position].field_type,
                 player.money
-            );
+            );*/
 
             if player.money <= 0 {
-                game_over = true;
-                break;
+                return GameResult {
+                    winner: player.name.clone(),
+                    rounds: loop_count,
+                };
             }
         }
         loop_count += 1
     }
-
-    println!("Player status {:?}", players[0]);
+    return GameResult {
+        winner: String::from("None"),
+        rounds: 0,
+    };
 }
 
 trait PlayerFunctions {
@@ -248,7 +283,7 @@ fn create_players() -> Vec<Player> {
         position: 17,
         ..Default::default()
     };
-    /*let blue_player = Player {
+    let blue_player = Player {
         name: String::from("Blue"),
         money: 1000000,
         position: 35,
@@ -259,9 +294,11 @@ fn create_players() -> Vec<Player> {
         money: 1000000,
         position: 50,
         ..Default::default()
-    };*/
+    };
     players.push(green_player);
     players.push(red_player);
+    players.push(blue_player);
+    players.push(yellow_player);
     return players;
 }
 
