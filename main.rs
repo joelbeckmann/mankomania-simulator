@@ -49,12 +49,14 @@ struct GameState {
     lottery_account: i32,
 }
 
+const DEBUG: bool = false;
+
 fn main() {
     let mut green_wins = 0;
     let mut red_wins = 0;
     let mut blue_wins = 0;
     let mut yellow_wins = 0;
-    for _ in 1..100 {
+    for _ in 0..1 {
         let game_result = self::simulate_game();
         if game_result.winner == "Green" {
             green_wins += 1;
@@ -65,10 +67,12 @@ fn main() {
         } else if game_result.winner == "Yellow" {
             yellow_wins += 1;
         }
-        println!(
-            "Player {:?} has won after {:?} rounds",
-            game_result.winner, game_result.rounds
-        );
+        if DEBUG {
+            println!(
+                "Player {:?} has won after {:?} rounds",
+                game_result.winner, game_result.rounds
+            );
+        }
     }
 
     println!(
@@ -97,14 +101,6 @@ fn simulate_game() -> GameResult {
         for player in &mut players {
             player.throw_dice(game_board_size);
             player.play_effect(game_state);
-            /*println!(
-                "{:?}: Player {:?} is on field {:?}: {:?} with {:?} dollar",
-                loop_count,
-                player.name,
-                player.position,
-                game_state.game_board[player.position].field_type,
-                player.money
-            );*/
 
             if player.money <= 0 {
                 return GameResult {
@@ -129,45 +125,106 @@ trait PlayerFunctions {
 impl PlayerFunctions for Player {
     fn play_effect(&mut self, game_state: &mut GameState) {
         let game_field = &mut game_state.game_board[self.position];
+        let pre_money = self.money;
         self.money += game_field.money_value;
         match game_field.field_type {
             FieldType::OilStock => {
                 self.oil_stocks += 1;
+                if DEBUG {
+                    println!(
+                        "{:?} received oil stock. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::ElectricityStock => {
                 self.electricity_stocks += 1;
+                if DEBUG {
+                    println!(
+                        "{:?} received electricity stock. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::SteelStock => {
                 self.steel_stocks += 1;
+                if DEBUG {
+                    println!(
+                        "{:?} received steel stock. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::ReturnStocks => {
                 self.oil_stocks = 0;
                 self.electricity_stocks = 0;
                 self.steel_stocks = 0;
+                if DEBUG {
+                    println!(
+                        "{:?} returned all stocks. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::MoveCasino => {
                 self.position = 61;
                 self.money += get_casino_result();
+                if DEBUG {
+                    println!(
+                        "{:?} played in the casino. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::MoveStockExchange => {
                 self.position = 53;
                 self.money += get_stock_exchange_result(self);
+                if DEBUG {
+                    println!(
+                        "{:?} went to the stock exchange. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::MoveDiceGame => {
                 self.position = 20;
                 self.money += get_dice_game_result();
+                if DEBUG {
+                    println!(
+                        "{:?} moved to the dice game. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::MoveHorseRace => {
                 self.position = 28;
                 self.money += get_horse_race_result();
+                if DEBUG {
+                    println!(
+                        "{:?} went to the horse race. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::MoveLottery => {
                 self.position = 44;
                 self.money += game_state.lottery_account;
                 game_state.lottery_account = 0;
+                if DEBUG {
+                    println!(
+                        "{:?} moved to the lottery. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::PayLottery => {
                 game_state.lottery_account += game_field.money_value;
+                if DEBUG {
+                    println!(
+                        "{:?} paid into the lottery. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
             }
             FieldType::Hotel => {
                 if self.hotel_built == false && game_field.hotel_built == false {
@@ -175,11 +232,30 @@ impl PlayerFunctions for Player {
                     game_field.hotel_built = true;
                     self.hotel_built = true;
                     self.money -= game_field.hotel_price;
+                    if DEBUG {
+                        println!(
+                            "{:?} bought a hotel({:?}). {:?} -> {:?}",
+                            self.name, self.position, pre_money, self.money
+                        );
+                    }
                 } else if game_field.hotel_built == true && self.hotel_position != self.position {
                     self.money -= game_field.hotel_rent;
+                    if DEBUG {
+                        println!(
+                            "{:?} rented a hotel({:?}). {:?} -> {:?}",
+                            self.name, self.position, pre_money, self.money
+                        );
+                    }
                 }
             }
-            _ => {}
+            FieldType::Normal => {
+                if DEBUG {
+                    println!(
+                        "{:?} paid money. {:?} -> {:?}",
+                        self.name, pre_money, self.money
+                    );
+                }
+            }
         }
     }
 
@@ -213,6 +289,12 @@ fn get_casino_result() -> i32 {
     } else if bandit_one == bandit_two || bandit_one == bandit_three || bandit_two == bandit_three {
         result += 50000;
     }
+    if DEBUG {
+        println!(
+            "Casino result: {:?}, roulette: {:?}, one armed bandit: {:?} {:?} {:?}",
+            result, roulette, bandit_one, bandit_two, bandit_three
+        );
+    }
     return result;
 }
 
@@ -221,24 +303,45 @@ fn get_stock_exchange_result(player: &mut Player) -> i32 {
     let stock_event = rng.random_range(1..7);
     match stock_event {
         1 => {
+            if DEBUG {
+                println!("Stock Exchange: Oil Stock rises");
+            }
             return (player.oil_stocks as i32 * 5000).into();
         }
         2 => {
+            if DEBUG {
+                println!("Stock Exchange: Oil Stock falls");
+            }
             return (player.oil_stocks as i32 * -10000).into();
         }
         3 => {
+            if DEBUG {
+                println!("Stock Exchange: Steel Stock rises");
+            }
             return (player.steel_stocks as i32 * 5000).into();
         }
         4 => {
+            if DEBUG {
+                println!("Stock Exchange: Steel Stock falls");
+            }
             return (player.steel_stocks as i32 * -10000).into();
         }
         5 => {
+            if DEBUG {
+                println!("Stock Exchange: Electricity Stock rises");
+            }
             return (player.electricity_stocks as i32 * 5000).into();
         }
         6 => {
+            if DEBUG {
+                println!("Stock Exchange: Electricity Stock falls");
+            }
             return (player.electricity_stocks as i32 * -10000).into();
         }
         7 => {
+            if DEBUG {
+                println!("Stock Exchange: All Stocks rise");
+            }
             return ((player.oil_stocks + player.steel_stocks + player.electricity_stocks) as i32
                 * 5000)
                 .into();
@@ -251,6 +354,9 @@ fn get_dice_game_result() -> i32 {
     let mut rng = rand::rng();
     let die_one = rng.random_range(1..6);
     let die_two = rng.random_range(1..6);
+    if DEBUG {
+        println!("Dice Game Result: {:?} {:?}", die_one, die_two);
+    }
     if die_one == 1 && die_two == 1 {
         return 300000;
     } else if die_one == 1 || die_two == 1 {
@@ -262,6 +368,9 @@ fn get_dice_game_result() -> i32 {
 fn get_horse_race_result() -> i32 {
     let mut rng = rand::rng();
     let horse_race = rng.random_range(1..100);
+    if DEBUG {
+        println!("Horse Race: {:?}", horse_race);
+    }
     if horse_race <= 45 {
         return 100000;
     } else {
