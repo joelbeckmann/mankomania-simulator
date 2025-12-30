@@ -23,7 +23,6 @@ enum FieldType {
     MoveHorseRace,
     MoveLottery,
     PayLottery,
-    Lottery,
     Hotel,
 }
 impl Default for FieldType {
@@ -51,55 +50,40 @@ struct GameState {
 }
 
 fn main() {
-    let game_board = self::build_game_board();
     let game_state = &mut GameState {
         game_board: self::build_game_board(),
         lottery_account: 0,
     };
     let game_board_size = game_state.game_board.len();
-    let mut green_player = Player {
-        name: String::from("Green"),
-        money: 1000000,
-        position: 0,
-        ..Default::default()
-    };
-    let mut red_player = Player {
-        name: String::from("Red"),
-        money: 1000000,
-        position: 17,
-        ..Default::default()
-    };
-    let mut blue_player = Player {
-        name: String::from("Blue"),
-        money: 1000000,
-        position: 35,
-        ..Default::default()
-    };
-    let mut yellow_player = Player {
-        name: String::from("Yellow"),
-        money: 1000000,
-        position: 50,
-        ..Default::default()
-    };
+
+    let mut players = self::create_players();
 
     println!("Status: Game board has {:?} fields", game_board_size);
 
     let mut loop_count = 0;
-    while green_player.money >= 0 {
-        green_player.throw_dice(game_board_size);
-        green_player.play_effect(game_state);
-        println!(
-            "{:?}: Player {:?} is on field {:?}: {:?} with {:?} dollar",
-            loop_count,
-            green_player.name,
-            green_player.position,
-            game_board[green_player.position].field_type,
-            green_player.money
-        );
+    let mut game_over = false;
+    while !game_over {
+        for player in &mut players {
+            player.throw_dice(game_board_size);
+            player.play_effect(game_state);
+            println!(
+                "{:?}: Player {:?} is on field {:?}: {:?} with {:?} dollar",
+                loop_count,
+                player.name,
+                player.position,
+                game_state.game_board[player.position].field_type,
+                player.money
+            );
+
+            if player.money <= 0 {
+                game_over = true;
+                break;
+            }
+        }
         loop_count += 1
     }
 
-    println!("Player status {:?}", green_player);
+    println!("Player status {:?}", players[0]);
 }
 
 trait PlayerFunctions {
@@ -248,6 +232,37 @@ fn get_horse_race_result() -> i32 {
     } else {
         return -50000;
     }
+}
+
+fn create_players() -> Vec<Player> {
+    let mut players = Vec::<Player>::new();
+    let green_player = Player {
+        name: String::from("Green"),
+        money: 1000000,
+        position: 0,
+        ..Default::default()
+    };
+    let red_player = Player {
+        name: String::from("Red"),
+        money: 1000000,
+        position: 17,
+        ..Default::default()
+    };
+    /*let blue_player = Player {
+        name: String::from("Blue"),
+        money: 1000000,
+        position: 35,
+        ..Default::default()
+    };
+    let yellow_player = Player {
+        name: String::from("Yellow"),
+        money: 1000000,
+        position: 50,
+        ..Default::default()
+    };*/
+    players.push(green_player);
+    players.push(red_player);
+    return players;
 }
 
 fn build_game_board() -> Vec<GameField> {
