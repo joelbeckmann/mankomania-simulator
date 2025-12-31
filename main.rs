@@ -1,4 +1,3 @@
-extern crate rand;
 use rand::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -7,11 +6,12 @@ struct GameField {
     field_type: FieldType,
     hotel_price: i32,
     hotel_rent: i32,
-    hotel_built: bool,
+    hotel_owner: Option<PlayerId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum FieldType {
+    #[default]
     Normal,
     OilStock,
     ElectricityStock,
@@ -25,15 +25,18 @@ enum FieldType {
     PayLottery,
     Hotel,
 }
-impl Default for FieldType {
-    fn default() -> Self {
-        FieldType::Normal
-    }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PlayerId {
+    Green,
+    Red,
+    Blue,
+    Yellow,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct Player {
-    name: String,
+    name: PlayerId,
     money: i32,
     position: usize,
     oil_stocks: u8,
@@ -49,6 +52,21 @@ struct GameState {
     lottery_account: i32,
 }
 
+struct Players {
+    players: Vec<Player>,
+    active_player: usize,
+}
+impl Players {
+    fn get_active_player(&mut self) -> &mut Player {
+        &mut self.players[self.active_player]
+    }
+    fn get_player(&mut self, player_id: PlayerId) -> Option<&mut Player> {
+        self.players
+            .iter_mut()
+            .find(|player| player.name == player_id)
+    }
+}
+
 const DEBUG: bool = false;
 
 fn main() {
@@ -58,14 +76,12 @@ fn main() {
     let mut yellow_wins = 0;
     for _ in 0..1000000 {
         let game_result = self::simulate_game();
-        if game_result.winner == "Green" {
-            green_wins += 1;
-        } else if game_result.winner == "Red" {
-            red_wins += 1;
-        } else if game_result.winner == "Blue" {
-            blue_wins += 1;
-        } else if game_result.winner == "Yellow" {
-            yellow_wins += 1;
+        match game_result.winner {
+            Some(PlayerId::Green) => green_wins += 1,
+            Some(PlayerId::Red) => red_wins += 1,
+            Some(PlayerId::Blue) => blue_wins += 1,
+            Some(PlayerId::Yellow) => yellow_wins += 1,
+            None => (),
         }
         if DEBUG {
             println!(
@@ -83,182 +99,128 @@ fn main() {
 
 #[derive(Default, Debug)]
 struct GameResult {
-    winner: String,
+    winner: Option<PlayerId>,
     rounds: i32,
 }
 
 fn simulate_game() -> GameResult {
-    let game_state = &mut GameState {
+    let mut game_state = GameState {
         game_board: build_game_board(),
         lottery_account: 0,
     };
     let game_board_size = game_state.game_board.len();
 
-    let mut players = self::create_players();
+    let mut players = Players {
+        players: create_players(),
+        active_player: 0,
+    };
 
     let mut loop_count = 0;
     while loop_count <= 500 {
-        for player in &mut players {
-            player.throw_dice(game_board_size);
-            player.play_effect(game_state);
+        for player_id in 0..players.players.len() {
+            players.active_player = player_id;
+            players.players[player_id].throw_dice(game_board_size);
+            play_effect(&mut game_state, &mut players);
 
-            if player.money <= 0 {
+            let poorest_player = players
+                .players
+                .iter()
+                .min_by_key(|player| player.money)
+                .unwrap();
+            if poorest_player.money <= 0 {
                 return GameResult {
-                    winner: player.name.clone(),
+                    winner: Some(poorest_player.name),
                     rounds: loop_count,
                 };
             }
         }
         loop_count += 1
     }
-    return GameResult {
-        winner: String::from("None"),
+    GameResult {
+        winner: None,
         rounds: 0,
-    };
+    }
 }
 
-trait PlayerFunctions {
-    fn play_effect(&mut self, game_state: &mut GameState);
-    fn throw_dice(&mut self, game_board_size: usize);
-}
-
-impl PlayerFunctions for Player {
-    fn play_effect(&mut self, game_state: &mut GameState) {
-        let game_field = &mut game_state.game_board[self.position];
-        let pre_money = self.money;
-        self.money += game_field.money_value;
-        match game_field.field_type {
-            FieldType::OilStock => {
-                self.oil_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received oil stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::ElectricityStock => {
-                self.electricity_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received electricity stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::SteelStock => {
-                self.steel_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received steel stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::ReturnStocks => {
-                self.oil_stocks = 0;
-                self.electricity_stocks = 0;
-                self.steel_stocks = 0;
-                if DEBUG {
-                    println!(
-                        "{:?} returned all stocks. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveCasino => {
-                self.position = 61;
-                self.money += get_casino_result();
-                if DEBUG {
-                    println!(
-                        "{:?} played in the casino. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveStockExchange => {
-                self.position = 53;
-                self.money += get_stock_exchange_result(self);
-                if DEBUG {
-                    println!(
-                        "{:?} went to the stock exchange. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveDiceGame => {
-                self.position = 20;
-                self.money += get_dice_game_result();
-                if DEBUG {
-                    println!(
-                        "{:?} moved to the dice game. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveHorseRace => {
-                self.position = 28;
-                self.money += get_horse_race_result();
-                if DEBUG {
-                    println!(
-                        "{:?} went to the horse race. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveLottery => {
-                self.position = 44;
-                self.money += game_state.lottery_account;
-                game_state.lottery_account = 0;
-                if DEBUG {
-                    println!(
-                        "{:?} moved to the lottery. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::PayLottery => {
-                game_state.lottery_account += game_field.money_value;
-                if DEBUG {
-                    println!(
-                        "{:?} paid into the lottery. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::Hotel => {
-                if self.hotel_built == false && game_field.hotel_built == false {
-                    self.hotel_position = self.position;
-                    game_field.hotel_built = true;
-                    self.hotel_built = true;
-                    self.money -= game_field.hotel_price;
-                    if DEBUG {
-                        println!(
-                            "{:?} bought a hotel({:?}). {:?} -> {:?}",
-                            self.name, self.position, pre_money, self.money
-                        );
-                    }
-                } else if game_field.hotel_built == true && self.hotel_position != self.position {
-                    self.money -= game_field.hotel_rent;
-                    if DEBUG {
-                        println!(
-                            "{:?} rented a hotel({:?}). {:?} -> {:?}",
-                            self.name, self.position, pre_money, self.money
-                        );
-                    }
-                }
-            }
-            FieldType::Normal => {
-                if DEBUG {
-                    println!(
-                        "{:?} paid money. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+fn play_effect(game_state: &mut GameState, players: &mut Players) {
+    let active_player = players.get_active_player();
+    let player_position = active_player.position;
+    let game_field = &mut game_state.game_board[player_position];
+    let pre_money = active_player.money;
+    active_player.money += game_field.money_value;
+    match game_field.field_type {
+        FieldType::OilStock => {
+            active_player.oil_stocks += 1;
+        }
+        FieldType::ElectricityStock => {
+            active_player.electricity_stocks += 1;
+        }
+        FieldType::SteelStock => {
+            active_player.steel_stocks += 1;
+        }
+        FieldType::ReturnStocks => {
+            active_player.oil_stocks = 0;
+            active_player.electricity_stocks = 0;
+            active_player.steel_stocks = 0;
+        }
+        FieldType::MoveCasino => {
+            active_player.position = 61;
+            active_player.money += get_casino_result();
+        }
+        FieldType::MoveStockExchange => {
+            active_player.position = 53;
+            for player in &mut players.players {
+                player.money += get_stock_exchange_result(player);
             }
         }
+        FieldType::MoveDiceGame => {
+            active_player.position = 20;
+            active_player.money += get_dice_game_result();
+        }
+        FieldType::MoveHorseRace => {
+            active_player.position = 28;
+            for player in &mut players.players {
+                player.money += get_horse_race_result();
+            }
+        }
+        FieldType::MoveLottery => {
+            active_player.position = 44;
+            active_player.money += game_state.lottery_account;
+            game_state.lottery_account = 0;
+        }
+        FieldType::PayLottery => {
+            active_player.money -= game_field.money_value;
+            game_state.lottery_account += game_field.money_value;
+        }
+        FieldType::Hotel => {
+            if !active_player.hotel_built && game_field.hotel_owner.is_none() {
+                active_player.hotel_position = active_player.position;
+                game_field.hotel_owner = Some(active_player.name);
+                active_player.hotel_built = true;
+                active_player.money -= game_field.hotel_price;
+            } else if let Some(hotel_owner) = game_field.hotel_owner
+                && hotel_owner != active_player.name
+            {
+                let active_player = players.get_active_player();
+                active_player.money -= game_field.hotel_rent;
+
+                let owner = players.get_player(hotel_owner).unwrap();
+                owner.money += game_field.hotel_rent;
+            }
+        }
+        FieldType::Normal => {}
     }
 
+    if DEBUG {
+        let active_player = players.get_active_player();
+        println!(
+            "{:?} visited {:?}. {:?} -> {:?}",
+            active_player.name, game_field.field_type, pre_money, active_player.money
+        );
+    }
+}
+
+impl Player {
     fn throw_dice(&mut self, game_board_size: usize) {
         let mut rng = rand::rng();
         let die_one = rng.random_range(1..6);
@@ -295,7 +257,7 @@ fn get_casino_result() -> i32 {
             result, roulette, bandit_one, bandit_two, bandit_three
         );
     }
-    return result;
+    result
 }
 
 fn get_stock_exchange_result(player: &mut Player) -> i32 {
@@ -306,47 +268,45 @@ fn get_stock_exchange_result(player: &mut Player) -> i32 {
             if DEBUG {
                 println!("Stock Exchange: Oil Stock rises");
             }
-            return (player.oil_stocks as i32 * 5000).into();
+            player.oil_stocks as i32 * 5000
         }
         2 => {
             if DEBUG {
                 println!("Stock Exchange: Oil Stock falls");
             }
-            return (player.oil_stocks as i32 * -10000).into();
+            player.oil_stocks as i32 * -10000
         }
         3 => {
             if DEBUG {
                 println!("Stock Exchange: Steel Stock rises");
             }
-            return (player.steel_stocks as i32 * 5000).into();
+            player.steel_stocks as i32 * 5000
         }
         4 => {
             if DEBUG {
                 println!("Stock Exchange: Steel Stock falls");
             }
-            return (player.steel_stocks as i32 * -10000).into();
+            player.steel_stocks as i32 * -10000
         }
         5 => {
             if DEBUG {
                 println!("Stock Exchange: Electricity Stock rises");
             }
-            return (player.electricity_stocks as i32 * 5000).into();
+            player.electricity_stocks as i32 * 5000
         }
         6 => {
             if DEBUG {
                 println!("Stock Exchange: Electricity Stock falls");
             }
-            return (player.electricity_stocks as i32 * -10000).into();
+            player.electricity_stocks as i32 * -10000
         }
         7 => {
             if DEBUG {
                 println!("Stock Exchange: All Stocks rise");
             }
-            return ((player.oil_stocks + player.steel_stocks + player.electricity_stocks) as i32
-                * 5000)
-                .into();
+            (player.oil_stocks + player.steel_stocks + player.electricity_stocks) as i32 * 5000
         }
-        _ => return 0,
+        _ => unreachable!(),
     }
 }
 
@@ -358,11 +318,12 @@ fn get_dice_game_result() -> i32 {
         println!("Dice Game Result: {:?} {:?}", die_one, die_two);
     }
     if die_one == 1 && die_two == 1 {
-        return 300000;
+        300000
     } else if die_one == 1 || die_two == 1 {
-        return 100000;
+        100000
+    } else {
+        0
     }
-    return 0;
 }
 
 fn get_horse_race_result() -> i32 {
@@ -371,368 +332,133 @@ fn get_horse_race_result() -> i32 {
     if DEBUG {
         println!("Horse Race: {:?}", horse_race);
     }
-    if horse_race <= 45 {
-        return 100000;
-    } else {
-        return -50000;
-    }
+    if horse_race <= 45 { 100000 } else { -50000 }
 }
 
 fn create_players() -> Vec<Player> {
-    let mut players = Vec::<Player>::new();
     let green_player = Player {
-        name: String::from("Green"),
+        name: PlayerId::Green,
         money: 1000000,
         position: 0,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let red_player = Player {
-        name: String::from("Red"),
+        name: PlayerId::Red,
         money: 1000000,
         position: 17,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let blue_player = Player {
-        name: String::from("Blue"),
+        name: PlayerId::Blue,
         money: 1000000,
         position: 35,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let yellow_player = Player {
-        name: String::from("Yellow"),
+        name: PlayerId::Yellow,
         money: 1000000,
         position: 50,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
-    players.push(green_player);
-    players.push(red_player);
-    players.push(blue_player);
-    players.push(yellow_player);
-    return players;
+    vec![green_player, red_player, blue_player, yellow_player]
 }
 
 fn build_game_board() -> Vec<GameField> {
-    let mut game_board = Vec::<GameField>::new();
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
+    let make_field = |money_value: i32, field_type: FieldType| GameField {
+        money_value,
+        field_type,
         ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -170000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
+    };
+    let make_hotel = |hotel_price: i32, hotel_rent: i32| GameField {
         field_type: FieldType::Hotel,
-        hotel_price: 150000,
-        hotel_rent: 15000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -180000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 150000,
-        hotel_rent: 15000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -25000, // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 5000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 50000,
-        hotel_rent: 5000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 7500, // TODO: Jeder Spieler gibt dir 5000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::ReturnStocks,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 200000,
-        hotel_rent: 20000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -150000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 1500, // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 100000,
-        hotel_rent: 10000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -5000, // TODO: Gib einem Mitspieler 5000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -7500, // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 100000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -25000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -20000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 100000,
-        hotel_rent: 10000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    return game_board;
+        hotel_price,
+        hotel_rent,
+        ..Default::default()
+    };
+    vec![
+        make_field(-100000, FieldType::ElectricityStock),
+        make_field(0, FieldType::MoveCasino),
+        make_field(-170000, FieldType::Normal),
+        make_field(-100000, FieldType::Normal),
+        make_hotel(150000, 15000),
+        make_field(0, FieldType::MoveStockExchange),
+        make_field(-50000, FieldType::PayLottery),
+        make_field(-180000, FieldType::Normal),
+        make_field(-100000, FieldType::OilStock),
+        make_field(0, FieldType::MoveDiceGame),
+        make_field(-50000, FieldType::Normal),
+        make_field(-100000, FieldType::ElectricityStock),
+        make_field(0, FieldType::MoveHorseRace),
+        make_hotel(150000, 15000),
+        make_field(0, FieldType::MoveCasino),
+        make_field(-100000, FieldType::SteelStock),
+        make_field(-50000, FieldType::PayLottery),
+        make_field(0, FieldType::MoveCasino),
+        make_field(0, FieldType::MoveStockExchange),
+        make_field(-10000, FieldType::Normal),
+        make_field(-100000, FieldType::SteelStock),
+        make_field(-25000, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
+        make_field(0, FieldType::MoveLottery),
+        make_field(5000, FieldType::Normal),
+        make_field(0, FieldType::MoveStockExchange),
+        make_field(-100000, FieldType::OilStock),
+        make_field(-50000, FieldType::Normal),
+        make_field(0, FieldType::MoveLottery),
+        make_field(-100000, FieldType::OilStock),
+        make_field(-10000, FieldType::Normal),
+        make_hotel(50000, 5000),
+        make_field(0, FieldType::MoveDiceGame),
+        make_field(7500, FieldType::Normal), // TODO: Jeder Spieler gibt dir 5000
+        make_field(-10000, FieldType::Normal),
+        make_field(0, FieldType::MoveCasino),
+        make_field(-100000, FieldType::SteelStock),
+        make_field(0, FieldType::MoveHorseRace),
+        make_field(0, FieldType::MoveStockExchange),
+        make_field(-100000, FieldType::OilStock),
+        make_field(0, FieldType::ReturnStocks),
+        make_hotel(200000, 20000),
+        make_field(0, FieldType::MoveCasino),
+        make_field(-100000, FieldType::ElectricityStock),
+        make_field(-150000, FieldType::Normal),
+        make_field(-10000, FieldType::PayLottery),
+        make_field(1500, FieldType::Normal), // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
+        make_field(0, FieldType::MoveDiceGame),
+        make_field(0, FieldType::MoveCasino),
+        make_hotel(100000, 10000),
+        make_field(-100000, FieldType::SteelStock),
+        make_field(-5000, FieldType::Normal), // TODO: Gib einem Mitspieler 5000
+        make_field(0, FieldType::MoveDiceGame),
+        make_field(-7500, FieldType::Normal), // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
+        make_field(-100000, FieldType::ElectricityStock),
+        make_field(0, FieldType::MoveLottery),
+        make_field(100000, FieldType::Normal),
+        make_field(-25000, FieldType::Normal),
+        make_field(0, FieldType::MoveCasino),
+        make_field(-20000, FieldType::Normal),
+        make_field(-100000, FieldType::ElectricityStock),
+        make_field(0, FieldType::MoveDiceGame),
+        make_field(0, FieldType::MoveHorseRace),
+        make_field(-100000, FieldType::SteelStock),
+        make_hotel(100000, 10000),
+        make_field(-100000, FieldType::SteelStock),
+        make_field(0, FieldType::ElectricityStock),
+        make_field(0, FieldType::MoveStockExchange),
+        make_field(10000, FieldType::Normal),
+    ]
 }
