@@ -151,107 +151,46 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
     match game_field.field_type {
         FieldType::OilStock => {
             active_player.oil_stocks += 1;
-            if DEBUG {
-                println!(
-                    "{:?} received oil stock. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::ElectricityStock => {
             active_player.electricity_stocks += 1;
-            if DEBUG {
-                println!(
-                    "{:?} received electricity stock. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::SteelStock => {
             active_player.steel_stocks += 1;
-            if DEBUG {
-                println!(
-                    "{:?} received steel stock. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::ReturnStocks => {
             active_player.oil_stocks = 0;
             active_player.electricity_stocks = 0;
             active_player.steel_stocks = 0;
-            if DEBUG {
-                println!(
-                    "{:?} returned all stocks. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::MoveCasino => {
             active_player.position = 61;
             active_player.money += get_casino_result();
-            if DEBUG {
-                println!(
-                    "{:?} played in the casino. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::MoveStockExchange => {
             active_player.position = 53;
             for player in &mut players.players {
-                let pre_money = player.money;
                 player.money += get_stock_exchange_result(player);
-                if DEBUG {
-                    println!(
-                        "{:?} went to the stock exchange. {:?} -> {:?}",
-                        player.name, pre_money, player.money
-                    );
-                }
             }
         }
         FieldType::MoveDiceGame => {
             active_player.position = 20;
             active_player.money += get_dice_game_result();
-            if DEBUG {
-                println!(
-                    "{:?} moved to the dice game. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::MoveHorseRace => {
             active_player.position = 28;
             for player in &mut players.players {
-                let pre_money = player.money;
                 player.money += get_horse_race_result();
-                if DEBUG {
-                    println!(
-                        "{:?} went to the horse race. {:?} -> {:?}",
-                        player.name, pre_money, player.money
-                    );
-                }
             }
         }
         FieldType::MoveLottery => {
             active_player.position = 44;
             active_player.money += game_state.lottery_account;
             game_state.lottery_account = 0;
-            if DEBUG {
-                println!(
-                    "{:?} moved to the lottery. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::PayLottery => {
+            active_player.money -= game_field.money_value;
             game_state.lottery_account += game_field.money_value;
-            if DEBUG {
-                println!(
-                    "{:?} paid into the lottery. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
         }
         FieldType::Hotel => {
             if !active_player.hotel_built && game_field.hotel_owner.is_none() {
@@ -259,40 +198,25 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
                 game_field.hotel_owner = Some(active_player.name);
                 active_player.hotel_built = true;
                 active_player.money -= game_field.hotel_price;
-                if DEBUG {
-                    println!(
-                        "{:?} bought a hotel({:?}). {:?} -> {:?}",
-                        active_player.name, active_player.position, pre_money, active_player.money
-                    );
-                }
             } else if let Some(hotel_owner) = game_field.hotel_owner
                 && hotel_owner != active_player.name
             {
                 let active_player = players.get_active_player();
                 active_player.money -= game_field.hotel_rent;
-                if DEBUG {
-                    println!(
-                        "{:?} rented a hotel({:?}). {:?} -> {:?}",
-                        active_player.name, active_player.position, pre_money, active_player.money
-                    );
-                }
 
                 let owner = players.get_player(hotel_owner).unwrap();
-                let owner_pre_money = owner.money;
                 owner.money += game_field.hotel_rent;
-                if DEBUG {
-                    println!("Hotel owner: {:?} -> {:?}", owner_pre_money, owner.money);
-                }
             }
         }
-        FieldType::Normal => {
-            if DEBUG {
-                println!(
-                    "{:?} paid money. {:?} -> {:?}",
-                    active_player.name, pre_money, active_player.money
-                );
-            }
-        }
+        FieldType::Normal => {}
+    }
+
+    if DEBUG {
+        let active_player = players.get_active_player();
+        println!(
+            "{:?} visited {:?}. {:?} -> {:?}",
+            active_player.name, game_field.field_type, pre_money, active_player.money
+        );
     }
 }
 
