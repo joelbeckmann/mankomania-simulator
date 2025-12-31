@@ -1,4 +1,3 @@
-extern crate rand;
 use rand::prelude::*;
 
 #[derive(Default, Debug, Clone)]
@@ -7,7 +6,7 @@ struct GameField {
     field_type: FieldType,
     hotel_price: i32,
     hotel_rent: i32,
-    hotel_built: bool,
+    hotel_owner: Option<PlayerId>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -53,6 +52,21 @@ struct GameState {
     lottery_account: i32,
 }
 
+struct Players {
+    players: Vec<Player>,
+    active_player: usize,
+}
+impl Players {
+    fn get_active_player(&mut self) -> &mut Player {
+        &mut self.players[self.active_player]
+    }
+    fn get_player(&mut self, player_id: PlayerId) -> Option<&mut Player> {
+        self.players
+            .iter_mut()
+            .find(|player| player.name == player_id)
+    }
+}
+
 const DEBUG: bool = false;
 
 fn main() {
@@ -90,23 +104,32 @@ struct GameResult {
 }
 
 fn simulate_game() -> GameResult {
-    let game_state = &mut GameState {
+    let mut game_state = GameState {
         game_board: build_game_board(),
         lottery_account: 0,
     };
     let game_board_size = game_state.game_board.len();
 
-    let mut players = self::create_players();
+    let mut players = Players {
+        players: create_players(),
+        active_player: 0,
+    };
 
     let mut loop_count = 0;
     while loop_count <= 500 {
-        for player in &mut players {
-            player.throw_dice(game_board_size);
-            player.play_effect(game_state);
+        for player_id in 0..players.players.len() {
+            players.active_player = player_id;
+            players.players[player_id].throw_dice(game_board_size);
+            play_effect(&mut game_state, &mut players);
 
-            if player.money <= 0 {
+            let poorest_player = players
+                .players
+                .iter()
+                .min_by_key(|player| player.money)
+                .unwrap();
+            if poorest_player.money <= 0 {
                 return GameResult {
-                    winner: Some(player.name),
+                    winner: Some(poorest_player.name),
                     rounds: loop_count,
                 };
             }
@@ -119,143 +142,161 @@ fn simulate_game() -> GameResult {
     }
 }
 
-impl Player {
-    fn play_effect(&mut self, game_state: &mut GameState) {
-        let game_field = &mut game_state.game_board[self.position];
-        let pre_money = self.money;
-        self.money += game_field.money_value;
-        match game_field.field_type {
-            FieldType::OilStock => {
-                self.oil_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received oil stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+fn play_effect(game_state: &mut GameState, players: &mut Players) {
+    let active_player = players.get_active_player();
+    let player_position = active_player.position;
+    let game_field = &mut game_state.game_board[player_position];
+    let pre_money = active_player.money;
+    active_player.money += game_field.money_value;
+    match game_field.field_type {
+        FieldType::OilStock => {
+            active_player.oil_stocks += 1;
+            if DEBUG {
+                println!(
+                    "{:?} received oil stock. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
             }
-            FieldType::ElectricityStock => {
-                self.electricity_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received electricity stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+        }
+        FieldType::ElectricityStock => {
+            active_player.electricity_stocks += 1;
+            if DEBUG {
+                println!(
+                    "{:?} received electricity stock. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
             }
-            FieldType::SteelStock => {
-                self.steel_stocks += 1;
-                if DEBUG {
-                    println!(
-                        "{:?} received steel stock. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+        }
+        FieldType::SteelStock => {
+            active_player.steel_stocks += 1;
+            if DEBUG {
+                println!(
+                    "{:?} received steel stock. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
             }
-            FieldType::ReturnStocks => {
-                self.oil_stocks = 0;
-                self.electricity_stocks = 0;
-                self.steel_stocks = 0;
-                if DEBUG {
-                    println!(
-                        "{:?} returned all stocks. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+        }
+        FieldType::ReturnStocks => {
+            active_player.oil_stocks = 0;
+            active_player.electricity_stocks = 0;
+            active_player.steel_stocks = 0;
+            if DEBUG {
+                println!(
+                    "{:?} returned all stocks. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
             }
-            FieldType::MoveCasino => {
-                self.position = 61;
-                self.money += get_casino_result();
-                if DEBUG {
-                    println!(
-                        "{:?} played in the casino. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
+        }
+        FieldType::MoveCasino => {
+            active_player.position = 61;
+            active_player.money += get_casino_result();
+            if DEBUG {
+                println!(
+                    "{:?} played in the casino. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
             }
-            FieldType::MoveStockExchange => {
-                self.position = 53;
-                self.money += get_stock_exchange_result(self);
+        }
+        FieldType::MoveStockExchange => {
+            active_player.position = 53;
+            for player in &mut players.players {
+                let pre_money = player.money;
+                player.money += get_stock_exchange_result(player);
                 if DEBUG {
                     println!(
                         "{:?} went to the stock exchange. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveDiceGame => {
-                self.position = 20;
-                self.money += get_dice_game_result();
-                if DEBUG {
-                    println!(
-                        "{:?} moved to the dice game. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveHorseRace => {
-                self.position = 28;
-                self.money += get_horse_race_result();
-                if DEBUG {
-                    println!(
-                        "{:?} went to the horse race. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::MoveLottery => {
-                self.position = 44;
-                self.money += game_state.lottery_account;
-                game_state.lottery_account = 0;
-                if DEBUG {
-                    println!(
-                        "{:?} moved to the lottery. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::PayLottery => {
-                game_state.lottery_account += game_field.money_value;
-                if DEBUG {
-                    println!(
-                        "{:?} paid into the lottery. {:?} -> {:?}",
-                        self.name, pre_money, self.money
-                    );
-                }
-            }
-            FieldType::Hotel => {
-                if !self.hotel_built && !game_field.hotel_built {
-                    self.hotel_position = self.position;
-                    game_field.hotel_built = true;
-                    self.hotel_built = true;
-                    self.money -= game_field.hotel_price;
-                    if DEBUG {
-                        println!(
-                            "{:?} bought a hotel({:?}). {:?} -> {:?}",
-                            self.name, self.position, pre_money, self.money
-                        );
-                    }
-                } else if game_field.hotel_built && self.hotel_position != self.position {
-                    self.money -= game_field.hotel_rent;
-                    if DEBUG {
-                        println!(
-                            "{:?} rented a hotel({:?}). {:?} -> {:?}",
-                            self.name, self.position, pre_money, self.money
-                        );
-                    }
-                }
-            }
-            FieldType::Normal => {
-                if DEBUG {
-                    println!(
-                        "{:?} paid money. {:?} -> {:?}",
-                        self.name, pre_money, self.money
+                        player.name, pre_money, player.money
                     );
                 }
             }
         }
-    }
+        FieldType::MoveDiceGame => {
+            active_player.position = 20;
+            active_player.money += get_dice_game_result();
+            if DEBUG {
+                println!(
+                    "{:?} moved to the dice game. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
+            }
+        }
+        FieldType::MoveHorseRace => {
+            active_player.position = 28;
+            for player in &mut players.players {
+                let pre_money = player.money;
+                player.money += get_horse_race_result();
+                if DEBUG {
+                    println!(
+                        "{:?} went to the horse race. {:?} -> {:?}",
+                        player.name, pre_money, player.money
+                    );
+                }
+            }
+        }
+        FieldType::MoveLottery => {
+            active_player.position = 44;
+            active_player.money += game_state.lottery_account;
+            game_state.lottery_account = 0;
+            if DEBUG {
+                println!(
+                    "{:?} moved to the lottery. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
+            }
+        }
+        FieldType::PayLottery => {
+            game_state.lottery_account += game_field.money_value;
+            if DEBUG {
+                println!(
+                    "{:?} paid into the lottery. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
+            }
+        }
+        FieldType::Hotel => {
+            if !active_player.hotel_built && game_field.hotel_owner.is_none() {
+                active_player.hotel_position = active_player.position;
+                game_field.hotel_owner = Some(active_player.name);
+                active_player.hotel_built = true;
+                active_player.money -= game_field.hotel_price;
+                if DEBUG {
+                    println!(
+                        "{:?} bought a hotel({:?}). {:?} -> {:?}",
+                        active_player.name, active_player.position, pre_money, active_player.money
+                    );
+                }
+            } else if let Some(hotel_owner) = game_field.hotel_owner
+                && hotel_owner != active_player.name
+            {
+                let active_player = players.get_active_player();
+                active_player.money -= game_field.hotel_rent;
+                if DEBUG {
+                    println!(
+                        "{:?} rented a hotel({:?}). {:?} -> {:?}",
+                        active_player.name, active_player.position, pre_money, active_player.money
+                    );
+                }
 
+                let owner = players.get_player(hotel_owner).unwrap();
+                let owner_pre_money = owner.money;
+                owner.money += game_field.hotel_rent;
+                if DEBUG {
+                    println!("Hotel owner: {:?} -> {:?}", owner_pre_money, owner.money);
+                }
+            }
+        }
+        FieldType::Normal => {
+            if DEBUG {
+                println!(
+                    "{:?} paid money. {:?} -> {:?}",
+                    active_player.name, pre_money, active_player.money
+                );
+            }
+        }
+    }
+}
+
+impl Player {
     fn throw_dice(&mut self, game_board_size: usize) {
         let mut rng = rand::rng();
         let die_one = rng.random_range(1..6);
