@@ -10,8 +10,9 @@ struct GameField {
     hotel_built: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum FieldType {
+    #[default]
     Normal,
     OilStock,
     ElectricityStock,
@@ -25,15 +26,18 @@ enum FieldType {
     PayLottery,
     Hotel,
 }
-impl Default for FieldType {
-    fn default() -> Self {
-        FieldType::Normal
-    }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PlayerId {
+    Green,
+    Red,
+    Blue,
+    Yellow,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct Player {
-    name: String,
+    name: PlayerId,
     money: i32,
     position: usize,
     oil_stocks: u8,
@@ -58,14 +62,12 @@ fn main() {
     let mut yellow_wins = 0;
     for _ in 0..1000000 {
         let game_result = self::simulate_game();
-        if game_result.winner == "Green" {
-            green_wins += 1;
-        } else if game_result.winner == "Red" {
-            red_wins += 1;
-        } else if game_result.winner == "Blue" {
-            blue_wins += 1;
-        } else if game_result.winner == "Yellow" {
-            yellow_wins += 1;
+        match game_result.winner {
+            Some(PlayerId::Green) => green_wins += 1,
+            Some(PlayerId::Red) => red_wins += 1,
+            Some(PlayerId::Blue) => blue_wins += 1,
+            Some(PlayerId::Yellow) => yellow_wins += 1,
+            None => (),
         }
         if DEBUG {
             println!(
@@ -83,7 +85,7 @@ fn main() {
 
 #[derive(Default, Debug)]
 struct GameResult {
-    winner: String,
+    winner: Option<PlayerId>,
     rounds: i32,
 }
 
@@ -104,25 +106,20 @@ fn simulate_game() -> GameResult {
 
             if player.money <= 0 {
                 return GameResult {
-                    winner: player.name.clone(),
+                    winner: Some(player.name),
                     rounds: loop_count,
                 };
             }
         }
         loop_count += 1
     }
-    return GameResult {
-        winner: String::from("None"),
+    GameResult {
+        winner: None,
         rounds: 0,
-    };
+    }
 }
 
-trait PlayerFunctions {
-    fn play_effect(&mut self, game_state: &mut GameState);
-    fn throw_dice(&mut self, game_board_size: usize);
-}
-
-impl PlayerFunctions for Player {
+impl Player {
     fn play_effect(&mut self, game_state: &mut GameState) {
         let game_field = &mut game_state.game_board[self.position];
         let pre_money = self.money;
@@ -227,7 +224,7 @@ impl PlayerFunctions for Player {
                 }
             }
             FieldType::Hotel => {
-                if self.hotel_built == false && game_field.hotel_built == false {
+                if !self.hotel_built && !game_field.hotel_built {
                     self.hotel_position = self.position;
                     game_field.hotel_built = true;
                     self.hotel_built = true;
@@ -238,7 +235,7 @@ impl PlayerFunctions for Player {
                             self.name, self.position, pre_money, self.money
                         );
                     }
-                } else if game_field.hotel_built == true && self.hotel_position != self.position {
+                } else if game_field.hotel_built && self.hotel_position != self.position {
                     self.money -= game_field.hotel_rent;
                     if DEBUG {
                         println!(
@@ -295,7 +292,7 @@ fn get_casino_result() -> i32 {
             result, roulette, bandit_one, bandit_two, bandit_three
         );
     }
-    return result;
+    result
 }
 
 fn get_stock_exchange_result(player: &mut Player) -> i32 {
@@ -306,47 +303,45 @@ fn get_stock_exchange_result(player: &mut Player) -> i32 {
             if DEBUG {
                 println!("Stock Exchange: Oil Stock rises");
             }
-            return (player.oil_stocks as i32 * 5000).into();
+            player.oil_stocks as i32 * 5000
         }
         2 => {
             if DEBUG {
                 println!("Stock Exchange: Oil Stock falls");
             }
-            return (player.oil_stocks as i32 * -10000).into();
+            player.oil_stocks as i32 * -10000
         }
         3 => {
             if DEBUG {
                 println!("Stock Exchange: Steel Stock rises");
             }
-            return (player.steel_stocks as i32 * 5000).into();
+            player.steel_stocks as i32 * 5000
         }
         4 => {
             if DEBUG {
                 println!("Stock Exchange: Steel Stock falls");
             }
-            return (player.steel_stocks as i32 * -10000).into();
+            player.steel_stocks as i32 * -10000
         }
         5 => {
             if DEBUG {
                 println!("Stock Exchange: Electricity Stock rises");
             }
-            return (player.electricity_stocks as i32 * 5000).into();
+            player.electricity_stocks as i32 * 5000
         }
         6 => {
             if DEBUG {
                 println!("Stock Exchange: Electricity Stock falls");
             }
-            return (player.electricity_stocks as i32 * -10000).into();
+            player.electricity_stocks as i32 * -10000
         }
         7 => {
             if DEBUG {
                 println!("Stock Exchange: All Stocks rise");
             }
-            return ((player.oil_stocks + player.steel_stocks + player.electricity_stocks) as i32
-                * 5000)
-                .into();
+            (player.oil_stocks + player.steel_stocks + player.electricity_stocks) as i32 * 5000
         }
-        _ => return 0,
+        _ => unreachable!(),
     }
 }
 
@@ -358,11 +353,12 @@ fn get_dice_game_result() -> i32 {
         println!("Dice Game Result: {:?} {:?}", die_one, die_two);
     }
     if die_one == 1 && die_two == 1 {
-        return 300000;
+        300000
     } else if die_one == 1 || die_two == 1 {
-        return 100000;
+        100000
+    } else {
+        0
     }
-    return 0;
 }
 
 fn get_horse_race_result() -> i32 {
@@ -371,368 +367,377 @@ fn get_horse_race_result() -> i32 {
     if DEBUG {
         println!("Horse Race: {:?}", horse_race);
     }
-    if horse_race <= 45 {
-        return 100000;
-    } else {
-        return -50000;
-    }
+    if horse_race <= 45 { 100000 } else { -50000 }
 }
 
 fn create_players() -> Vec<Player> {
-    let mut players = Vec::<Player>::new();
     let green_player = Player {
-        name: String::from("Green"),
+        name: PlayerId::Green,
         money: 1000000,
         position: 0,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let red_player = Player {
-        name: String::from("Red"),
+        name: PlayerId::Red,
         money: 1000000,
         position: 17,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let blue_player = Player {
-        name: String::from("Blue"),
+        name: PlayerId::Blue,
         money: 1000000,
         position: 35,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
     let yellow_player = Player {
-        name: String::from("Yellow"),
+        name: PlayerId::Yellow,
         money: 1000000,
         position: 50,
-        ..Default::default()
+        oil_stocks: 0,
+        electricity_stocks: 0,
+        steel_stocks: 0,
+        hotel_built: false,
+        hotel_position: 0,
     };
-    players.push(green_player);
-    players.push(red_player);
-    players.push(blue_player);
-    players.push(yellow_player);
-    return players;
+    vec![green_player, red_player, blue_player, yellow_player]
 }
 
 fn build_game_board() -> Vec<GameField> {
-    let mut game_board = Vec::<GameField>::new();
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -170000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 150000,
-        hotel_rent: 15000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -180000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 150000,
-        hotel_rent: 15000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -25000, // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 5000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -50000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 50000,
-        hotel_rent: 5000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 7500, // TODO: Jeder Spieler gibt dir 5000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::OilStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::ReturnStocks,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 200000,
-        hotel_rent: 20000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -150000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -10000,
-        field_type: FieldType::PayLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 1500, // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 100000,
-        hotel_rent: 10000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -5000, // TODO: Gib einem Mitspieler 5000
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -7500, // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveLottery,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 100000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -25000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveCasino,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -20000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveDiceGame,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveHorseRace,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::Hotel,
-        hotel_price: 100000,
-        hotel_rent: 10000,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: -100000,
-        field_type: FieldType::SteelStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::ElectricityStock,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        field_type: FieldType::MoveStockExchange,
-        ..Default::default()
-    });
-    game_board.push(GameField {
-        money_value: 10000,
-        field_type: FieldType::Normal,
-        ..Default::default()
-    });
-    return game_board;
+    vec![
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -170000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 150000,
+            hotel_rent: 15000,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveStockExchange,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -50000,
+            field_type: FieldType::PayLottery,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -180000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::OilStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveDiceGame,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -50000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 0,
+            field_type: FieldType::MoveHorseRace,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 150000,
+            hotel_rent: 15000,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -50000,
+            field_type: FieldType::PayLottery,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveStockExchange,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -10000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -25000, // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 0,
+            field_type: FieldType::MoveLottery,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 5000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveStockExchange,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::OilStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -50000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveLottery,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::OilStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -10000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 50000,
+            hotel_rent: 5000,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveDiceGame,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 7500, // TODO: Jeder Spieler gibt dir 5000
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -10000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveHorseRace,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveStockExchange,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::OilStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::ReturnStocks,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 200000,
+            hotel_rent: 20000,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -150000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -10000,
+            field_type: FieldType::PayLottery,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 1500, // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveDiceGame,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 100000,
+            hotel_rent: 10000,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -5000, // TODO: Gib einem Mitspieler 5000
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveDiceGame,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -7500, // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveLottery,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 100000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -25000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveCasino,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -20000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveDiceGame,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveHorseRace,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::Hotel,
+            hotel_price: 100000,
+            hotel_rent: 10000,
+            ..Default::default()
+        },
+        GameField {
+            money_value: -100000,
+            field_type: FieldType::SteelStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::ElectricityStock,
+            ..Default::default()
+        },
+        GameField {
+            field_type: FieldType::MoveStockExchange,
+            ..Default::default()
+        },
+        GameField {
+            money_value: 10000,
+            field_type: FieldType::Normal,
+            ..Default::default()
+        },
+    ]
 }
