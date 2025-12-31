@@ -56,7 +56,7 @@ fn main() {
     let mut red_wins = 0;
     let mut blue_wins = 0;
     let mut yellow_wins = 0;
-    for _ in 0..10000 {
+    for _ in 0..1000000 {
         let game_result = self::simulate_game();
         if game_result.winner == "Green" {
             green_wins += 1;
@@ -472,7 +472,6 @@ fn build_game_board() -> Vec<GameField> {
         ..Default::default()
     });
     game_board.push(GameField {
-        money_value: -170000,
         field_type: FieldType::MoveHorseRace,
         ..Default::default()
     });
@@ -520,7 +519,6 @@ fn build_game_board() -> Vec<GameField> {
         ..Default::default()
     });
     game_board.push(GameField {
-        money_value: -50000,
         field_type: FieldType::MoveLottery,
         ..Default::default()
     });
