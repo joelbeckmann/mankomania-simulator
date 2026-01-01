@@ -59,7 +59,10 @@ struct Players {
     active_player: usize,
 }
 impl Players {
-    fn get_active_player(&mut self) -> &mut Player {
+    fn get_active_player(&self) -> &Player {
+        &self.players[self.active_player]
+    }
+    fn get_active_player_mut(&mut self) -> &mut Player {
         &mut self.players[self.active_player]
     }
     fn get_player(&mut self, player_id: PlayerId) -> Option<&mut Player> {
@@ -70,6 +73,7 @@ impl Players {
 }
 
 const DEBUG: bool = false;
+const MAIN_CIRCLE_SIZE: usize = 68;
 
 fn main() {
     let mut green_wins = 0;
@@ -110,7 +114,6 @@ fn simulate_game() -> GameResult {
         game_board: build_game_board(),
         lottery_account: 0,
     };
-    let game_board_size = 68;
 
     let mut players = Players {
         players: create_players(),
@@ -125,73 +128,8 @@ fn simulate_game() -> GameResult {
             // advance player position
             let position_before = players.get_active_player().position;
             {
-                let choose = |p1: usize, p2: usize| -> usize {
-                    if game_state.game_board[p1].money_value < game_state.game_board[p2].money_value
-                    {
-                        p1
-                    } else {
-                        p2
-                    }
-                };
-                let dice_roll = throw_dice();
-                let new_position = if position_before >= game_board_size {
-                    // special fields: player can go to event, or go back to the main circle
-                    match position_before {
-                        68 => choose(70, 23 + dice_roll - 1),
-                        69 => choose(70, 23 + dice_roll - 2),
-                        70 => {
-                            if dice_roll == 2 {
-                                68
-                            } else {
-                                23 + dice_roll - 3
-                            }
-                        }
-                        71 => choose(73, 32 + dice_roll - 1),
-                        72 => choose(73, 32 + dice_roll - 2),
-                        73 => {
-                            if dice_roll == 2 {
-                                71
-                            } else {
-                                32 + dice_roll - 3
-                            }
-                        }
-                        74 => choose(76, 57 + dice_roll - 1),
-                        75 => choose(76, 57 + dice_roll - 2),
-                        76 => {
-                            if dice_roll == 2 {
-                                74
-                            } else {
-                                57 + dice_roll - 3
-                            }
-                        }
-                        77 => choose(78, 65 + dice_roll - 1),
-                        78 => choose(78, 65 + dice_roll - 2),
-                        79 => {
-                            if dice_roll == 2 {
-                                77
-                            } else {
-                                65 + dice_roll - 3
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    // start from main circle
-                    let new_position = (position_before + dice_roll) % game_board_size;
-                    match new_position {
-                        // Böse 1
-                        24 | 25 | 26 => choose(new_position, new_position + 68 - 44),
-                        // Pferde-Rennen
-                        32 | 33 | 34 => choose(new_position, new_position + 71 - 32),
-                        // Aktien-Börse
-                        57 | 58 | 59 => choose(new_position, new_position + 74 - 57),
-                        // Casino
-                        65 | 66 | 67 => choose(new_position, new_position + 77 - 65),
-                        // Default
-                        _ => new_position,
-                    }
-                };
-                players.get_active_player().position = new_position;
+                let new_position = choose_player_position(&game_state, &players);
+                players.get_active_player_mut().position = new_position;
             };
 
             play_effect(&mut game_state, &mut players, position_before);
@@ -217,8 +155,115 @@ fn simulate_game() -> GameResult {
     }
 }
 
+fn choose_player_position(game_state: &GameState, players: &Players) -> usize {
+    let choose = |p1: usize, p2: usize| -> usize {
+        if expected_gain(game_state, players, p1) < expected_gain(game_state, players, p2) {
+            p1
+        } else {
+            p2
+        }
+    };
+    let dice_roll = throw_dice();
+    let position_before = players.get_active_player().position;
+    if position_before >= MAIN_CIRCLE_SIZE {
+        // special fields: player can go to event, or go back to the main circle
+        // strategy: assume that players take the greedy approach and choose the field where they lose tho most money
+        match position_before {
+            68 => choose(70, 23 + dice_roll - 1),
+            69 => choose(70, 23 + dice_roll - 2),
+            70 => {
+                if dice_roll == 2 {
+                    68
+                } else {
+                    23 + dice_roll - 3
+                }
+            }
+            71 => choose(73, 32 + dice_roll - 1),
+            72 => choose(73, 32 + dice_roll - 2),
+            73 => {
+                if dice_roll == 2 {
+                    71
+                } else {
+                    32 + dice_roll - 3
+                }
+            }
+            74 => choose(76, 57 + dice_roll - 1),
+            75 => choose(76, 57 + dice_roll - 2),
+            76 => {
+                if dice_roll == 2 {
+                    74
+                } else {
+                    57 + dice_roll - 3
+                }
+            }
+            77 => choose(78, 65 + dice_roll - 1),
+            78 => choose(78, 65 + dice_roll - 2),
+            79 => {
+                if dice_roll == 2 {
+                    77
+                } else {
+                    65 + dice_roll - 3
+                }
+            }
+            _ => unreachable!(),
+        }
+    } else {
+        // start from main circle
+        let new_position = (position_before + dice_roll) % MAIN_CIRCLE_SIZE;
+        // sometimes players can choose to go to event fields, which are not in the main circle
+        match new_position {
+            // Böse 1
+            24..=26 => choose(new_position, new_position + 68 - 44),
+            // Pferde-Rennen
+            32..=34 => choose(new_position, new_position + 71 - 32),
+            // Aktien-Börse
+            57..=59 => choose(new_position, new_position + 74 - 57),
+            // Casino
+            65..=67 => choose(new_position, new_position + 77 - 65),
+            // Default
+            _ => new_position,
+        }
+    }
+}
+
+fn expected_gain(game_state: &GameState, players: &Players, position: usize) -> i32 {
+    let player = players.get_active_player();
+    match game_state.game_board[position].field_type {
+        FieldType::Normal => game_state.game_board[position].money_value,
+        FieldType::OilStock => game_state.game_board[position].money_value,
+        FieldType::ElectricityStock => game_state.game_board[position].money_value,
+        FieldType::SteelStock => game_state.game_board[position].money_value,
+        FieldType::ReturnStocks => 0, // TODO: what is the expected gain/loss here?
+        FieldType::MoveCasino => 0,   // TODO: exact value?
+        FieldType::MoveStockExchange => {
+            -2500 * (player.oil_stocks + player.electricity_stocks + player.steel_stocks) as i32 / 3
+        } // TODO: should correct for gains of other players
+        FieldType::MoveDiceGame => 44000, // TODO: exact value?
+        FieldType::MoveHorseRace => 0, // since all players are affected, we can assume that the average gain is 0
+        FieldType::MoveLottery => game_state.lottery_account,
+        FieldType::PayLottery => game_state.game_board[position].money_value,
+        FieldType::Hotel => {
+            if game_state.game_board[position].hotel_owner.is_none() {
+                if player.hotel_built {
+                    0
+                } else {
+                    -game_state.game_board[position].hotel_price
+                }
+            } else if let Some(hotel_owner) = game_state.game_board[position].hotel_owner
+                && hotel_owner != player.name
+            {
+                -game_state.game_board[position].hotel_rent
+            } else {
+                0
+            }
+        }
+        FieldType::EverybodyGivesYou5000 => 5000 * (players.players.len() as i32 - 1),
+        FieldType::YouGiveSomeone5000 => -5000,
+    }
+}
+
 fn play_effect(game_state: &mut GameState, players: &mut Players, position_before: usize) {
-    let active_player = players.get_active_player();
+    let active_player = players.get_active_player_mut();
     let player_position = active_player.position;
     let game_field = &mut game_state.game_board[player_position];
     let pre_money = active_player.money;
@@ -283,7 +328,6 @@ fn play_effect(game_state: &mut GameState, players: &mut Players, position_befor
             } else if let Some(hotel_owner) = game_field.hotel_owner
                 && hotel_owner != active_player.name
             {
-                let active_player = players.get_active_player();
                 active_player.money -= game_field.hotel_rent;
 
                 let owner = players.get_player(hotel_owner).unwrap();
@@ -293,7 +337,7 @@ fn play_effect(game_state: &mut GameState, players: &mut Players, position_befor
         FieldType::Normal => {}
         FieldType::EverybodyGivesYou5000 => {
             let active_player_name = active_player.name;
-            players.get_active_player().money += players
+            players.get_active_player_mut().money += players
                 .players
                 .iter_mut()
                 .filter(|p| p.name != active_player_name)
@@ -313,7 +357,7 @@ fn play_effect(game_state: &mut GameState, players: &mut Players, position_befor
                 .min_by_key(|player| player.money);
             if let Some(p) = poorest_player {
                 p.money += 5000;
-                players.get_active_player().money -= 5000;
+                players.get_active_player_mut().money -= 5000;
             }
         }
     }
@@ -440,7 +484,7 @@ fn get_horse_race_result() -> i32 {
     if DEBUG {
         println!("Horse Race: {:?}", horse_race);
     }
-    if horse_race <= 45 { 100000 } else { -50000 }
+    if horse_race <= 15 { 100000 } else { -50000 }
 }
 
 fn create_players() -> Vec<Player> {
