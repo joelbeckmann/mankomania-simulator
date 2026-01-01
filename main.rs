@@ -394,38 +394,46 @@ fn build_game_board() -> Vec<GameField> {
     vec![
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveCasino),
-        make_field(-170000, FieldType::Normal),
-        make_field(-100000, FieldType::Normal),
+        make_field(-170000, FieldType::Normal), // Stifte 170000 für den "Verein anonymer Weltstars e.V."
+        make_field(-100000, FieldType::Normal), // Du wirst zum Generalkonsul von Atlantis ernannt. Zahle 100000
         make_hotel(150000, 15000),
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-50000, FieldType::PayLottery),
-        make_field(-180000, FieldType::Normal),
+        make_field(-50000, FieldType::PayLottery), // Zahle 50000 in die Lotterie ein
+        make_field(-180000, FieldType::Normal),    // Spende 180000 für den EG Butterberg
         make_field(-100000, FieldType::OilStock),
         make_field(0, FieldType::MoveDiceGame),
-        make_field(-50000, FieldType::Normal),
+        make_field(50000, FieldType::Normal), // Deine liebe Oma gibt Dir 50000 Taschengeld
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveHorseRace),
         make_hotel(150000, 15000),
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::SteelStock),
-        make_field(-50000, FieldType::PayLottery),
+        make_field(-50000, FieldType::PayLottery), // Zahle 50000 in die Lotterie ein
         make_field(0, FieldType::MoveCasino),
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-10000, FieldType::Normal),
+        make_field(-10000, FieldType::Normal), // Dein Buch "Alle binären Zahlen auf einen Blick" bringt dir 10000 an Tantiemen ein
         make_field(-100000, FieldType::SteelStock),
-        make_field(-25000, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
+        make_field(0, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen. => 0 on average
         make_field(0, FieldType::MoveLottery),
-        make_field(5000, FieldType::Normal),
+        make_field(5000, FieldType::Normal), // Du verkaufst einem Bierzelt Dachpfannen für 5000
+        // TODO: Weg zur Bösen 1
+        // * Miete für 5000 die "Titanic" für eine Kreuzfahrt
+        // * Werde für 5000 Mitglied im Club Absoluter Relativisten
+        // * Böse 1
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-100000, FieldType::OilStock),
-        make_field(-50000, FieldType::Normal),
+        make_field(0, FieldType::OilStock), // Gratis-Aktie: "Trockenöl-AG"
+        make_field(-50000, FieldType::Normal), // Kaufe das Rennpferd "Schlußlicht" für 50000
         make_field(0, FieldType::MoveLottery),
         make_field(-100000, FieldType::OilStock),
-        make_field(-10000, FieldType::Normal),
+        make_field(10000, FieldType::Normal), // Das Finanzamt schenkt Dir 10000
         make_hotel(50000, 5000),
         make_field(0, FieldType::MoveDiceGame),
+        // TODO: Weg zum Pferde-Rennen
+        // * Laß dir einen Logenplatz für das Pferderennen auf dem Nürburgring reservieren. Zahle 30000
+        // * Ersteigere für 20000 das antike Motorboot von Ramses II
+        // * Pferderennen
         make_field(7500, FieldType::Normal), // TODO: Jeder Spieler gibt dir 5000
-        make_field(-10000, FieldType::Normal),
+        make_field(-10000, FieldType::Normal), // Du bist Sponsor der Hochsee-Regatta "Rund um die Schweiz". Zahle 10000
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::SteelStock),
         make_field(0, FieldType::MoveHorseRace),
@@ -435,9 +443,9 @@ fn build_game_board() -> Vec<GameField> {
         make_hotel(200000, 20000),
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::ElectricityStock),
-        make_field(-150000, FieldType::Normal),
-        make_field(-10000, FieldType::PayLottery),
-        make_field(1500, FieldType::Normal), // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
+        make_field(-150000, FieldType::Normal), // Kaufe 150 Strandkörbe am Nördlichen Eismeer für 150000
+        make_field(-5000, FieldType::PayLottery), // TODO: Kaufe im _Vorbeigehen_ Lotterie-Lose für 5000
+        make_field(10000 / 6, FieldType::Normal), // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000 => use average
         make_field(0, FieldType::MoveDiceGame),
         make_field(0, FieldType::MoveCasino),
         make_hotel(100000, 10000),
@@ -447,18 +455,26 @@ fn build_game_board() -> Vec<GameField> {
         make_field(-7500, FieldType::Normal), // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveLottery),
-        make_field(100000, FieldType::Normal),
-        make_field(-25000, FieldType::Normal),
+        make_field(100000, FieldType::Normal), // Ein Scheich schenkt dir seine Ölquelle. Du verkaufst sie für 100000 weiter
+        make_field(-25000, FieldType::Normal), // Zahle 25000 Kaution für den Mörderer des Toten Meeres
+        // TODO: Weg zur Aktien-Börse:
+        // * Zahle 10000 für einen Brilliant-Zahnstocher
+        // * Finanziere mit 40000 die Erforschung des magnetischen Westpols der Erde.
+        // * Aktien-Börse
         make_field(0, FieldType::MoveCasino),
-        make_field(-20000, FieldType::Normal),
+        make_field(-20000, FieldType::Normal), // Zahle 20000 für eine Filmexpedition über den Hochzeitstanz der Alpenhörner
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveDiceGame),
         make_field(0, FieldType::MoveHorseRace),
         make_field(-100000, FieldType::SteelStock),
         make_hotel(100000, 10000),
-        make_field(-100000, FieldType::SteelStock),
-        make_field(0, FieldType::ElectricityStock),
+        make_field(-100000, FieldType::OilStock),
+        // TODO: Weg zum Casino:
+        // * Stifte 10000 für die "Sonne-um-Erde"-Gesellschaft
+        // * Versichere für 40000 ein Wüstenschiff gegen das Auflaufen auf eine Sandbank.
+        // * Casino
+        make_field(0, FieldType::ElectricityStock), // Gratis-Aktie: Kurzschluß-Versorgungs-AG
         make_field(0, FieldType::MoveStockExchange),
-        make_field(10000, FieldType::Normal),
+        make_field(10000, FieldType::Normal), // Du gewinnst bei einem Fernseh-Quiz den Trostpreis von 10000
     ]
 }
