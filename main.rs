@@ -110,7 +110,7 @@ fn simulate_game() -> GameResult {
         game_board: build_game_board(),
         lottery_account: 0,
     };
-    let game_board_size = game_state.game_board.len();
+    let game_board_size = 68;
 
     let mut players = Players {
         players: create_players(),
@@ -121,8 +121,9 @@ fn simulate_game() -> GameResult {
     while loop_count <= 500 {
         for player_id in 0..players.players.len() {
             players.active_player = player_id;
+            let position_before = players.players[player_id].position;
             players.players[player_id].throw_dice(game_board_size);
-            play_effect(&mut game_state, &mut players);
+            play_effect(&mut game_state, &mut players, position_before);
 
             let poorest_player = players
                 .players
@@ -144,12 +145,19 @@ fn simulate_game() -> GameResult {
     }
 }
 
-fn play_effect(game_state: &mut GameState, players: &mut Players) {
+fn play_effect(game_state: &mut GameState, players: &mut Players, position_before: usize) {
     let active_player = players.get_active_player();
     let player_position = active_player.position;
     let game_field = &mut game_state.game_board[player_position];
     let pre_money = active_player.money;
     active_player.money += game_field.money_value;
+
+    // #44 Kaufe im Vorbeigehen Lotterie-Lose für 5000
+    if position_before < 44 && active_player.position >= 44 {
+        active_player.money -= 5000;
+        game_state.lottery_account += 5000;
+    }
+
     match game_field.field_type {
         FieldType::OilStock => {
             active_player.oil_stocks += 1;
@@ -419,7 +427,7 @@ fn build_game_board() -> Vec<GameField> {
         ..Default::default()
     };
     vec![
-        make_field(-100000, FieldType::ElectricityStock),
+        make_field(-100000, FieldType::ElectricityStock), // #0
         make_field(0, FieldType::MoveCasino),
         make_field(-170000, FieldType::Normal), // Stifte 170000 für den "Verein anonymer Weltstars e.V."
         make_field(-100000, FieldType::Normal), // Du wirst zum Generalkonsul von Atlantis ernannt. Zahle 100000
@@ -429,7 +437,7 @@ fn build_game_board() -> Vec<GameField> {
         make_field(-180000, FieldType::Normal),    // Spende 180000 für den EG Butterberg
         make_field(-100000, FieldType::OilStock),
         make_field(0, FieldType::MoveDiceGame),
-        make_field(50000, FieldType::Normal), // Deine liebe Oma gibt Dir 50000 Taschengeld
+        make_field(50000, FieldType::Normal), // #10 Deine liebe Oma gibt Dir 50000 Taschengeld
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveHorseRace),
         make_hotel(150000, 15000),
@@ -439,7 +447,7 @@ fn build_game_board() -> Vec<GameField> {
         make_field(0, FieldType::MoveCasino),
         make_field(0, FieldType::MoveStockExchange),
         make_field(-10000, FieldType::Normal), // Dein Buch "Alle binären Zahlen auf einen Blick" bringt dir 10000 an Tantiemen ein
-        make_field(-100000, FieldType::SteelStock),
+        make_field(-100000, FieldType::SteelStock), // #20
         make_field(0, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen. => 0 on average
         make_field(0, FieldType::MoveLottery),
         make_field(5000, FieldType::Normal), // Du verkaufst einem Bierzelt Dachpfannen für 5000
@@ -453,7 +461,7 @@ fn build_game_board() -> Vec<GameField> {
         make_field(0, FieldType::MoveLottery),
         make_field(-100000, FieldType::OilStock),
         make_field(10000, FieldType::Normal), // Das Finanzamt schenkt Dir 10000
-        make_hotel(50000, 5000),
+        make_hotel(50000, 5000),              // #30
         make_field(0, FieldType::MoveDiceGame),
         // TODO: Weg zum Pferde-Rennen
         // * Laß dir einen Logenplatz für das Pferderennen auf dem Nürburgring reservieren. Zahle 30000
@@ -467,17 +475,17 @@ fn build_game_board() -> Vec<GameField> {
         make_field(0, FieldType::MoveStockExchange),
         make_field(-100000, FieldType::OilStock),
         make_field(0, FieldType::ReturnStocks),
-        make_hotel(200000, 20000),
+        make_hotel(200000, 20000), // #40
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::ElectricityStock),
         make_field(-150000, FieldType::Normal), // Kaufe 150 Strandkörbe am Nördlichen Eismeer für 150000
-        make_field(-5000, FieldType::PayLottery), // TODO: Kaufe im _Vorbeigehen_ Lotterie-Lose für 5000
+        make_field(0, FieldType::PayLottery),   // #44 Kaufe im Vorbeigehen Lotterie-Lose für 5000
         make_field(10000 / 6, FieldType::Normal), // Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000 => use average
         make_field(0, FieldType::MoveDiceGame),
         make_field(0, FieldType::MoveCasino),
         make_hotel(100000, 10000),
         make_field(-100000, FieldType::SteelStock),
-        make_field(-5000, FieldType::YouGiveSomeone5000), // Gib einem Mitspieler 5000
+        make_field(-5000, FieldType::YouGiveSomeone5000), // #50 Gib einem Mitspieler 5000
         make_field(0, FieldType::MoveDiceGame),
         make_field(-7500, FieldType::Normal), // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
         make_field(-100000, FieldType::ElectricityStock),
@@ -491,7 +499,7 @@ fn build_game_board() -> Vec<GameField> {
         make_field(0, FieldType::MoveCasino),
         make_field(-20000, FieldType::Normal), // Zahle 20000 für eine Filmexpedition über den Hochzeitstanz der Alpenhörner
         make_field(-100000, FieldType::ElectricityStock),
-        make_field(0, FieldType::MoveDiceGame),
+        make_field(0, FieldType::MoveDiceGame), // #60
         make_field(0, FieldType::MoveHorseRace),
         make_field(-100000, FieldType::SteelStock),
         make_hotel(100000, 10000),
@@ -502,6 +510,6 @@ fn build_game_board() -> Vec<GameField> {
         // * Casino
         make_field(0, FieldType::ElectricityStock), // Gratis-Aktie: Kurzschluß-Versorgungs-AG
         make_field(0, FieldType::MoveStockExchange),
-        make_field(10000, FieldType::Normal), // Du gewinnst bei einem Fernseh-Quiz den Trostpreis von 10000
+        make_field(10000, FieldType::Normal), // # 67 Du gewinnst bei einem Fernseh-Quiz den Trostpreis von 10000
     ]
 }
