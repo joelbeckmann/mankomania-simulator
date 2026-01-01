@@ -24,6 +24,8 @@ enum FieldType {
     MoveLottery,
     PayLottery,
     Hotel,
+    EverybodyGivesYou5000,
+    YouGiveSomeone5000,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -57,7 +59,10 @@ struct Players {
     active_player: usize,
 }
 impl Players {
-    fn get_active_player(&mut self) -> &mut Player {
+    fn get_active_player(&self) -> &Player {
+        &self.players[self.active_player]
+    }
+    fn get_active_player_mut(&mut self) -> &mut Player {
         &mut self.players[self.active_player]
     }
     fn get_player(&mut self, player_id: PlayerId) -> Option<&mut Player> {
@@ -68,6 +73,7 @@ impl Players {
 }
 
 const DEBUG: bool = false;
+const MAIN_CIRCLE_SIZE: usize = 68;
 
 fn main() {
     let mut green_wins = 0;
@@ -108,7 +114,6 @@ fn simulate_game() -> GameResult {
         game_board: build_game_board(),
         lottery_account: 0,
     };
-    let game_board_size = game_state.game_board.len();
 
     let mut players = Players {
         players: create_players(),
@@ -119,9 +124,17 @@ fn simulate_game() -> GameResult {
     while loop_count <= 500 {
         for player_id in 0..players.players.len() {
             players.active_player = player_id;
-            players.players[player_id].throw_dice(game_board_size);
-            play_effect(&mut game_state, &mut players);
 
+            // advance player position
+            let position_before = players.get_active_player().position;
+            {
+                let new_position = choose_player_position(&game_state, &players);
+                players.get_active_player_mut().position = new_position;
+            };
+
+            play_effect(&mut game_state, &mut players, position_before);
+
+            // check for game completion
             let poorest_player = players
                 .players
                 .iter()
@@ -142,12 +155,126 @@ fn simulate_game() -> GameResult {
     }
 }
 
-fn play_effect(game_state: &mut GameState, players: &mut Players) {
-    let active_player = players.get_active_player();
+fn choose_player_position(game_state: &GameState, players: &Players) -> usize {
+    let choose = |p1: usize, p2: usize| -> usize {
+        if expected_gain(game_state, players, p1) < expected_gain(game_state, players, p2) {
+            p1
+        } else {
+            p2
+        }
+    };
+    let dice_roll = throw_dice();
+    let position_before = players.get_active_player().position;
+    if position_before >= MAIN_CIRCLE_SIZE {
+        // special fields: player can go to event, or go back to the main circle
+        // strategy: assume that players take the greedy approach and choose the field where they lose tho most money
+        match position_before {
+            68 => choose(70, 23 + dice_roll - 1),
+            69 => choose(70, 23 + dice_roll - 2),
+            70 => {
+                if dice_roll == 2 {
+                    68
+                } else {
+                    23 + dice_roll - 3
+                }
+            }
+            71 => choose(73, 32 + dice_roll - 1),
+            72 => choose(73, 32 + dice_roll - 2),
+            73 => {
+                if dice_roll == 2 {
+                    71
+                } else {
+                    32 + dice_roll - 3
+                }
+            }
+            74 => choose(76, 57 + dice_roll - 1),
+            75 => choose(76, 57 + dice_roll - 2),
+            76 => {
+                if dice_roll == 2 {
+                    74
+                } else {
+                    57 + dice_roll - 3
+                }
+            }
+            77 => choose(78, 65 + dice_roll - 1),
+            78 => choose(78, 65 + dice_roll - 2),
+            79 => {
+                if dice_roll == 2 {
+                    77
+                } else {
+                    65 + dice_roll - 3
+                }
+            }
+            _ => unreachable!(),
+        }
+    } else {
+        // start from main circle
+        let new_position = (position_before + dice_roll) % MAIN_CIRCLE_SIZE;
+        // sometimes players can choose to go to event fields, which are not in the main circle
+        match new_position {
+            // Böse 1
+            24..=26 => choose(new_position, new_position + 68 - 44),
+            // Pferde-Rennen
+            32..=34 => choose(new_position, new_position + 71 - 32),
+            // Aktien-Börse
+            57..=59 => choose(new_position, new_position + 74 - 57),
+            // Casino
+            65..=67 => choose(new_position, new_position + 77 - 65),
+            // Default
+            _ => new_position,
+        }
+    }
+}
+
+fn expected_gain(game_state: &GameState, players: &Players, position: usize) -> i32 {
+    let player = players.get_active_player();
+    match game_state.game_board[position].field_type {
+        FieldType::Normal => game_state.game_board[position].money_value,
+        FieldType::OilStock => game_state.game_board[position].money_value,
+        FieldType::ElectricityStock => game_state.game_board[position].money_value,
+        FieldType::SteelStock => game_state.game_board[position].money_value,
+        FieldType::ReturnStocks => 0, // TODO: what is the expected gain/loss here?
+        FieldType::MoveCasino => 0,   // TODO: exact value?
+        FieldType::MoveStockExchange => {
+            -2500 * (player.oil_stocks + player.electricity_stocks + player.steel_stocks) as i32 / 3
+        } // TODO: should correct for gains of other players
+        FieldType::MoveDiceGame => 44000, // TODO: exact value?
+        FieldType::MoveHorseRace => 0, // since all players are affected, we can assume that the average gain is 0
+        FieldType::MoveLottery => game_state.lottery_account,
+        FieldType::PayLottery => game_state.game_board[position].money_value,
+        FieldType::Hotel => {
+            if game_state.game_board[position].hotel_owner.is_none() {
+                if player.hotel_built {
+                    0
+                } else {
+                    -game_state.game_board[position].hotel_price
+                }
+            } else if let Some(hotel_owner) = game_state.game_board[position].hotel_owner
+                && hotel_owner != player.name
+            {
+                -game_state.game_board[position].hotel_rent
+            } else {
+                0
+            }
+        }
+        FieldType::EverybodyGivesYou5000 => 5000 * (players.players.len() as i32 - 1),
+        FieldType::YouGiveSomeone5000 => -5000,
+    }
+}
+
+fn play_effect(game_state: &mut GameState, players: &mut Players, position_before: usize) {
+    let active_player = players.get_active_player_mut();
     let player_position = active_player.position;
     let game_field = &mut game_state.game_board[player_position];
     let pre_money = active_player.money;
     active_player.money += game_field.money_value;
+
+    // #44 Kaufe im Vorbeigehen Lotterie-Lose für 5000
+    if position_before < 44 && active_player.position >= 44 {
+        active_player.money -= 5000;
+        game_state.lottery_account += 5000;
+    }
+
     match game_field.field_type {
         FieldType::OilStock => {
             active_player.oil_stocks += 1;
@@ -164,21 +291,21 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
             active_player.steel_stocks = 0;
         }
         FieldType::MoveCasino => {
-            active_player.position = 61;
+            active_player.position = 79;
             active_player.money += get_casino_result();
         }
         FieldType::MoveStockExchange => {
-            active_player.position = 53;
+            active_player.position = 76;
             for player in &mut players.players {
                 player.money += get_stock_exchange_result(player);
             }
         }
         FieldType::MoveDiceGame => {
-            active_player.position = 20;
+            active_player.position = 70;
             active_player.money += get_dice_game_result();
         }
         FieldType::MoveHorseRace => {
-            active_player.position = 28;
+            active_player.position = 73;
             for player in &mut players.players {
                 player.money += get_horse_race_result();
             }
@@ -201,7 +328,6 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
             } else if let Some(hotel_owner) = game_field.hotel_owner
                 && hotel_owner != active_player.name
             {
-                let active_player = players.get_active_player();
                 active_player.money -= game_field.hotel_rent;
 
                 let owner = players.get_player(hotel_owner).unwrap();
@@ -209,25 +335,51 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
             }
         }
         FieldType::Normal => {}
+        FieldType::EverybodyGivesYou5000 => {
+            let active_player_name = active_player.name;
+            players.get_active_player_mut().money += players
+                .players
+                .iter_mut()
+                .filter(|p| p.name != active_player_name)
+                .map(|p| {
+                    p.money -= 5000;
+                    5000
+                })
+                .sum::<i32>();
+        }
+        FieldType::YouGiveSomeone5000 => {
+            // Strategy: assume that players always give to the poorest player (the one closest to a win)
+            let active_player_name = active_player.name;
+            let poorest_player = players
+                .players
+                .iter_mut()
+                .filter(|p| p.name != active_player_name)
+                .min_by_key(|player| player.money);
+            if let Some(p) = poorest_player {
+                p.money += 5000;
+                players.get_active_player_mut().money -= 5000;
+            }
+        }
     }
 
     if DEBUG {
         let active_player = players.get_active_player();
         println!(
-            "{:?} visited {:?}. {:?} -> {:?}",
-            active_player.name, game_field.field_type, pre_money, active_player.money
+            "{:?} visited #{} ({:?}). {:?} -> {:?}",
+            active_player.name,
+            active_player.position,
+            game_field.field_type,
+            pre_money,
+            active_player.money
         );
     }
 }
 
-impl Player {
-    fn throw_dice(&mut self, game_board_size: usize) {
-        let mut rng = rand::rng();
-        let die_one = rng.random_range(1..6);
-        let die_two = rng.random_range(1..6);
-        let new_pos = (self.position + die_one + die_two) % game_board_size;
-        self.position = new_pos as usize;
-    }
+fn throw_dice() -> usize {
+    let mut rng = rand::rng();
+    let die_one = rng.random_range(1..6);
+    let die_two = rng.random_range(1..6);
+    die_one + die_two
 }
 
 fn get_casino_result() -> i32 {
@@ -332,7 +484,7 @@ fn get_horse_race_result() -> i32 {
     if DEBUG {
         println!("Horse Race: {:?}", horse_race);
     }
-    if horse_race <= 45 { 100000 } else { -50000 }
+    if horse_race <= 15 { 100000 } else { -50000 }
 }
 
 fn create_players() -> Vec<Player> {
@@ -392,73 +544,89 @@ fn build_game_board() -> Vec<GameField> {
         ..Default::default()
     };
     vec![
-        make_field(-100000, FieldType::ElectricityStock),
+        make_field(-100000, FieldType::ElectricityStock), // #0
         make_field(0, FieldType::MoveCasino),
-        make_field(-170000, FieldType::Normal),
-        make_field(-100000, FieldType::Normal),
+        make_field(-170000, FieldType::Normal), // Stifte 170000 für den "Verein anonymer Weltstars e.V."
+        make_field(-100000, FieldType::Normal), // Du wirst zum Generalkonsul von Atlantis ernannt. Zahle 100000
         make_hotel(150000, 15000),
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-50000, FieldType::PayLottery),
-        make_field(-180000, FieldType::Normal),
+        make_field(-50000, FieldType::PayLottery), // Zahle 50000 in die Lotterie ein
+        make_field(-180000, FieldType::Normal),    // Spende 180000 für den EG Butterberg
         make_field(-100000, FieldType::OilStock),
         make_field(0, FieldType::MoveDiceGame),
-        make_field(-50000, FieldType::Normal),
+        make_field(50000, FieldType::Normal), // #10 Deine liebe Oma gibt Dir 50000 Taschengeld
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveHorseRace),
         make_hotel(150000, 15000),
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::SteelStock),
-        make_field(-50000, FieldType::PayLottery),
+        make_field(-50000, FieldType::PayLottery), // Zahle 50000 in die Lotterie ein
         make_field(0, FieldType::MoveCasino),
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-10000, FieldType::Normal),
-        make_field(-100000, FieldType::SteelStock),
-        make_field(-25000, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen.
+        make_field(-10000, FieldType::Normal), // Dein Buch "Alle binären Zahlen auf einen Blick" bringt dir 10000 an Tantiemen ein
+        make_field(-100000, FieldType::SteelStock), // #20
+        make_field(0, FieldType::Normal), // Du und ein Mitspieler würfeln je 1x. Der höher Wurf bekommt 50.000 vom anderen. => 0 on average
         make_field(0, FieldType::MoveLottery),
-        make_field(5000, FieldType::Normal),
+        make_field(5000, FieldType::Normal), // #23 Kreuzung: Du verkaufst einem Bierzelt Dachpfannen für 5000. Normaler Weg -> #24, Böse 1 -> #68
         make_field(0, FieldType::MoveStockExchange),
-        make_field(-100000, FieldType::OilStock),
-        make_field(-50000, FieldType::Normal),
+        make_field(0, FieldType::OilStock), // Gratis-Aktie: "Trockenöl-AG"
+        make_field(-50000, FieldType::Normal), // Kaufe das Rennpferd "Schlußlicht" für 50000
         make_field(0, FieldType::MoveLottery),
         make_field(-100000, FieldType::OilStock),
-        make_field(-10000, FieldType::Normal),
-        make_hotel(50000, 5000),
-        make_field(0, FieldType::MoveDiceGame),
-        make_field(7500, FieldType::Normal), // TODO: Jeder Spieler gibt dir 5000
-        make_field(-10000, FieldType::Normal),
+        make_field(10000, FieldType::Normal), // Das Finanzamt schenkt Dir 10000
+        make_hotel(50000, 5000),              // #30
+        make_field(0, FieldType::MoveDiceGame), // #31 Kreuzung: Normaler Weg -> #32, Pferderennen -> #71
+        make_field(0, FieldType::EverybodyGivesYou5000), // Jeder Spieler gibt dir 5000
+        make_field(-10000, FieldType::Normal), // Du bist Sponsor der Hochsee-Regatta "Rund um die Schweiz". Zahle 10000
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::SteelStock),
         make_field(0, FieldType::MoveHorseRace),
         make_field(0, FieldType::MoveStockExchange),
         make_field(-100000, FieldType::OilStock),
         make_field(0, FieldType::ReturnStocks),
-        make_hotel(200000, 20000),
+        make_hotel(200000, 20000), // #40
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::ElectricityStock),
-        make_field(-150000, FieldType::Normal),
-        make_field(-10000, FieldType::PayLottery),
-        make_field(1500, FieldType::Normal), // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000
+        make_field(-150000, FieldType::Normal), // Kaufe 150 Strandkörbe am Nördlichen Eismeer für 150000
+        make_field(0, FieldType::PayLottery),   // #44 Kaufe im Vorbeigehen Lotterie-Lose für 5000
+        make_field(10000 / 6, FieldType::Normal), // Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000 => use average
         make_field(0, FieldType::MoveDiceGame),
         make_field(0, FieldType::MoveCasino),
         make_hotel(100000, 10000),
         make_field(-100000, FieldType::SteelStock),
-        make_field(-5000, FieldType::Normal), // TODO: Gib einem Mitspieler 5000
+        make_field(-5000, FieldType::YouGiveSomeone5000), // #50 Gib einem Mitspieler 5000
         make_field(0, FieldType::MoveDiceGame),
         make_field(-7500, FieldType::Normal), // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
         make_field(-100000, FieldType::ElectricityStock),
         make_field(0, FieldType::MoveLottery),
-        make_field(100000, FieldType::Normal),
-        make_field(-25000, FieldType::Normal),
+        make_field(100000, FieldType::Normal), // Ein Scheich schenkt dir seine Ölquelle. Du verkaufst sie für 100000 weiter
+        make_field(-25000, FieldType::Normal), // #56 Kreuzung: Zahle 25000 Kaution für den Mörderer des Toten Meeres. Normaler Weg -> #57, Aktien-Börse -> #74
         make_field(0, FieldType::MoveCasino),
-        make_field(-20000, FieldType::Normal),
+        make_field(-20000, FieldType::Normal), // Zahle 20000 für eine Filmexpedition über den Hochzeitstanz der Alpenhörner
         make_field(-100000, FieldType::ElectricityStock),
-        make_field(0, FieldType::MoveDiceGame),
+        make_field(0, FieldType::MoveDiceGame), // #60
         make_field(0, FieldType::MoveHorseRace),
         make_field(-100000, FieldType::SteelStock),
         make_hotel(100000, 10000),
-        make_field(-100000, FieldType::SteelStock),
-        make_field(0, FieldType::ElectricityStock),
+        make_field(-100000, FieldType::OilStock), // #64 Kreuzung: Normaler Weg -> #65, Casino -> #77
+        make_field(0, FieldType::ElectricityStock), // Gratis-Aktie: Kurzschluß-Versorgungs-AG
         make_field(0, FieldType::MoveStockExchange),
-        make_field(10000, FieldType::Normal),
+        make_field(10000, FieldType::Normal), // # 67 Du gewinnst bei einem Fernseh-Quiz den Trostpreis von 10000
+        // Weg zur Bösen 1
+        make_field(-5000, FieldType::Normal), // #68  Miete für 5000 die "Titanic" für eine Kreuzfahrt
+        make_field(-5000, FieldType::Normal), // #69 Werde für 5000 Mitglied im Club Absoluter Relativisten
+        make_field(0, FieldType::MoveCasino), // #70 Böse 1
+        // Weg zum Pferde-Rennen
+        make_field(-30000, FieldType::Normal), // #71 Laß dir einen Logenplatz für das Pferderennen auf dem Nürburgring reservieren. Zahle 30000
+        make_field(-20000, FieldType::Normal), // #72 Ersteigere für 20000 das antike Motorboot von Ramses II
+        make_field(0, FieldType::MoveHorseRace), // #73 Pferderennen
+        // Weg zur Aktien-Börse
+        make_field(-10000, FieldType::Normal), // #74 Zahle 10000 für einen Brilliant-Zahnstocher
+        make_field(-40000, FieldType::Normal), // #75 Finanziere mit 40000 die Erforschung des magnetischen Westpols der Erde.
+        make_field(0, FieldType::MoveStockExchange), // #76 Aktien-Börse
+        // Weg zum Casino
+        make_field(-10000, FieldType::Normal), // #77 Stifte 10000 für die "Sonne-um-Erde"-Gesellschaft
+        make_field(-40000, FieldType::Normal), // #78 Versichere für 40000 ein Wüstenschiff gegen das Auflaufen auf eine Sandbank.
+        make_field(0, FieldType::MoveCasino),  // #79 Casino
     ]
 }
