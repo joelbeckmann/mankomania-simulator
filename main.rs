@@ -24,6 +24,8 @@ enum FieldType {
     MoveLottery,
     PayLottery,
     Hotel,
+    EverybodyGivesYou5000,
+    YouGiveSomeone5000,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -209,6 +211,31 @@ fn play_effect(game_state: &mut GameState, players: &mut Players) {
             }
         }
         FieldType::Normal => {}
+        FieldType::EverybodyGivesYou5000 => {
+            let active_player_name = active_player.name;
+            players.get_active_player().money += players
+                .players
+                .iter_mut()
+                .filter(|p| p.name != active_player_name)
+                .map(|p| {
+                    p.money -= 5000;
+                    5000
+                })
+                .sum::<i32>();
+        }
+        FieldType::YouGiveSomeone5000 => {
+            // Strategy: assume that players always give to the poorest player (the one closest to a win)
+            let active_player_name = active_player.name;
+            let poorest_player = players
+                .players
+                .iter_mut()
+                .filter(|p| p.name != active_player_name)
+                .min_by_key(|player| player.money);
+            if let Some(p) = poorest_player {
+                p.money += 5000;
+                players.get_active_player().money -= 5000;
+            }
+        }
     }
 
     if DEBUG {
@@ -432,7 +459,7 @@ fn build_game_board() -> Vec<GameField> {
         // * Laß dir einen Logenplatz für das Pferderennen auf dem Nürburgring reservieren. Zahle 30000
         // * Ersteigere für 20000 das antike Motorboot von Ramses II
         // * Pferderennen
-        make_field(7500, FieldType::Normal), // TODO: Jeder Spieler gibt dir 5000
+        make_field(0, FieldType::EverybodyGivesYou5000), // Jeder Spieler gibt dir 5000
         make_field(-10000, FieldType::Normal), // Du bist Sponsor der Hochsee-Regatta "Rund um die Schweiz". Zahle 10000
         make_field(0, FieldType::MoveCasino),
         make_field(-100000, FieldType::SteelStock),
@@ -445,12 +472,12 @@ fn build_game_board() -> Vec<GameField> {
         make_field(-100000, FieldType::ElectricityStock),
         make_field(-150000, FieldType::Normal), // Kaufe 150 Strandkörbe am Nördlichen Eismeer für 150000
         make_field(-5000, FieldType::PayLottery), // TODO: Kaufe im _Vorbeigehen_ Lotterie-Lose für 5000
-        make_field(10000 / 6, FieldType::Normal), // TODO: Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000 => use average
+        make_field(10000 / 6, FieldType::Normal), // Du würfelst einmal mit einem Würfel: Für eine 6 gibt's 10000 => use average
         make_field(0, FieldType::MoveDiceGame),
         make_field(0, FieldType::MoveCasino),
         make_hotel(100000, 10000),
         make_field(-100000, FieldType::SteelStock),
-        make_field(-5000, FieldType::Normal), // TODO: Gib einem Mitspieler 5000
+        make_field(-5000, FieldType::YouGiveSomeone5000), // Gib einem Mitspieler 5000
         make_field(0, FieldType::MoveDiceGame),
         make_field(-7500, FieldType::Normal), // TODO: Gib jedem Mitspieler 5000 der etwas blaues trägt
         make_field(-100000, FieldType::ElectricityStock),
